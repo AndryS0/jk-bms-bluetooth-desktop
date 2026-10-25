@@ -9,8 +9,9 @@ or replace existing projects like
 [esphome-jk-bms](https://github.com/syssi/esphome-jk-bms),
 [batmon-ha](https://github.com/fl4p/batmon-ha) or
 [BMS_BLE-HA](https://github.com/patman15/BMS_BLE-HA). It's small, built around
-my own needs, and only tested with my BMS. If you try it, read the code first:
-the limits on the settings tab are hard-coded for my cells.
+my own needs, and only tested with my BMS. If you try it, read the code first,
+and set your own `[limits]` in `config.toml`: the ones in `config.example.toml`
+are for my cells.
 
 ## What it does
 
@@ -21,14 +22,16 @@ the limits on the settings tab are hard-coded for my cells.
     of charge, temperatures, switches), charge/discharge runs, events and CSV
     export;
   - a BMS settings tab to view the settings and change the common ones. After
-    each write the logger reads all settings back to confirm the change.
+    each write the logger reads all settings back to confirm the change. What
+    may be changed, and within which range, comes from `[limits]` in
+    `config.toml`; settings without a range there stay read-only.
 
 ## Run
 
 Needs Windows 10 or later with Bluetooth LE, and [uv](https://docs.astral.sh/uv/).
 
 ```
-copy config.example.toml config.toml    # then set your BMS's Bluetooth name
+copy config.example.toml config.toml    # then set your BMS's Bluetooth name and [limits]
 uv sync
 uv run jkbms_logger.py
 ```

@@ -65,7 +65,8 @@
       <button type="button" class="btn" id="settings-reload">Read again from the BMS</button>
     </div>
     <p class="notice" id="settings-notice" hidden></p>
-    <p class="muted small settings-intro">Changed values are written one at a time. After each write the logger reads every setting back from the BMS, to confirm the new value took effect and nothing else changed; if anything looks wrong it stops. Limits follow your cells' datasheet, which is stricter than what the BMS allows.</p>
+    <div class="notice" id="settings-config" hidden></div>
+    <p class="muted small settings-intro">Changed values are written one at a time. After each write the logger reads every setting back from the BMS, to confirm the new value took effect and nothing else changed; if anything looks wrong it stops. The allowed range for each setting comes from <code>[limits]</code> in config.toml; settings without a range there are read-only.</p>
     <div id="settings-groups"></div>
 
     <section class="card block">

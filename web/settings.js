@@ -83,7 +83,7 @@ function settingRow(m, value) {
 
   const input = el("div", "setting-input");
   if (!m.editable) {
-    input.append(el("span", "muted small", "read-only"));
+    input.append(el("span", "muted small", m.locked === "config" ? "read-only: no range in config.toml" : "read-only"));
   } else if (m.switch) {
     const box = el("input", "toggle");
     box.type = "checkbox";
@@ -120,6 +120,11 @@ function flagsBlock(flags) {
 function renderSettings() {
   const d = settingsUi.data;
   $("settings-read").textContent = d.read_at ? `Read from the BMS at ${fmtTime(d.read_at, true)}` : "Not read yet";
+  const problems = d.config_problems || [];
+  $("settings-config").hidden = !problems.length;
+  $("settings-config").replaceChildren(
+    ...(problems.length ? [el("strong", null, "Problems in config.toml"), ...problems.map((p) => el("div", null, p))] : []),
+  );
   const box = $("settings-groups");
   box.replaceChildren();
   if (d.values) {

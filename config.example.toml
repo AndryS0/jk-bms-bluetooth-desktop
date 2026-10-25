@@ -26,6 +26,40 @@ balance_trigger_mv = 10
 # Here OVP is used as the normal charge stop.
 expected_alarms = ["Cell OVP"]
 
+[limits]
+# Allowed range [min, max] for each setting you can change on the BMS settings
+# tab. A setting that isn't listed is shown read-only. A range outside what the
+# BMS itself works with is ignored (the log and the settings tab say so).
+# These values are for LiFePO4 cells (REPT 72174L4 280 Ah datasheet) on a
+# JK_B1A8S10P (1 A balancer, 100 A). Adjust them for your cells and BMS.
+cell_ovp = [3.40, 3.65]             # V   Cell OVP
+cell_ovpr = [3.25, 3.60]            # V   Cell OVPR
+cell_uvp = [2.50, 3.10]             # V   Cell UVP
+cell_uvpr = [2.60, 3.30]            # V   Cell UVPR
+power_off_v = [2.30, 3.00]          # V   Power Off Vol.
+soc100_v = [3.30, 3.65]             # V   SOC-100% Volt.
+soc0_v = [2.50, 3.20]               # V   SOC-0% Volt.
+balance_trigger_v = [0.003, 0.100]  # V   Balance Trig. Volt.
+balance_start_v = [3.00, 3.60]      # V   Start Balance Volt.
+max_balance_a = [0.1, 1.0]          # A   Max Balance Curr.
+max_charge_a = [1, 100]             # A   Continued Charge Curr.
+charge_ocp_delay = [2, 600]         # s   Charge OCP Delay
+charge_ocpr_time = [2, 600]         # s   Charge OCPR Time
+max_discharge_a = [1, 100]          # A   Continued Discharge Curr.
+discharge_ocp_delay = [2, 600]      # s   Discharge OCP Delay
+discharge_ocpr_time = [2, 600]      # s   Discharge OCPR Time
+charge_otp = [30, 60]               # °C  Charge OTP
+charge_otpr = [30, 58]              # °C  Charge OTPR
+discharge_otp = [30, 70]            # °C  Discharge OTP
+discharge_otpr = [30, 68]           # °C  Discharge OTPR
+charge_utp = [0, 15]                # °C  Charge UTP (no charging below 0 °C)
+charge_utpr = [2, 20]               # °C  Charge UTPR
+mos_otp = [50, 100]                 # °C  MOS OTP
+mos_otpr = [50, 95]                 # °C  MOS OTPR
+capacity_ah = [50, 500]             # Ah  Battery Capacity
+rcv = [3.30, 3.65]                  # V   Vol. Cell RCV
+rfv = [3.20, 3.50]                  # V   Vol. Cell RFV
+
 [web]
 # Keep 127.0.0.1 so the dashboard is only reachable from this PC.
 host = "127.0.0.1"

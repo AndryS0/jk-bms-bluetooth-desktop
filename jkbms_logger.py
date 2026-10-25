@@ -84,8 +84,13 @@ def alarm_names(code: int | None) -> list[str]:
 # JK02_32S settings frame (type 0x01, 300 bytes) and its write registers, as in
 # syssi/esphome-jk-bms (decode_jk02_settings_ and the JK02_32S column of its
 # number/switch maps). Each 4-byte field at offset o is written through
-# register (o - 6) / 4 + 1. Limits are deliberately tighter than the BMS allows:
-# they follow the REPT 72174L4 datasheet for this pack.
+# register (o - 6) / 4 + 1.
+#
+# What may be written is configuration: [limits] in config.toml sets the
+# allowed range per setting, and a setting without one stays read-only.
+# `bounds` here is only an outer sanity check on those ranges (the ranges
+# esphome-jk-bms offers, i.e. what the BMS works with), so a typo like 36.5
+# for 3.65 can't open up a nonsense write.
 
 
 @dataclass(frozen=True)
@@ -95,12 +100,11 @@ class Setting:
     jk_name: str  # what the JK app calls it
     group: str
     offset: int
-    register: int | None  # None: shown but not editable here
+    register: int | None  # None: shown but never written
     factor: int = 1000  # raw = value * factor
     unit: str = "V"
     digits: int = 3
-    min: float | None = None
-    max: float | None = None
+    bounds: tuple[float, float] | None = None  # outer limit for its [limits] range
     signed: bool = False
     switch: bool = False
     help: str = ""
@@ -113,79 +117,77 @@ SETTING_GROUPS = (
     ("current", "Current protection"),
     ("temperature", "Temperature protection"),
     ("battery", "Battery and switches"),
-    ("inverter", "Inverter communication (not used by this UPS)"),
+    ("inverter", "Inverter communication (CAN/RS485)"),
 )
 
+_CELL_V = {"bounds": (1.2, 4.35)}
 _TEMP = {"factor": 10, "unit": "°C", "digits": 1, "signed": True}
-_SECONDS = {"factor": 1, "unit": "s", "digits": 0}
+_DELAY = {"factor": 1, "unit": "s", "digits": 0, "bounds": (2, 600)}
 _AMPS = {"unit": "A", "digits": 1}
+_INVERTER = "Only sent to inverters that talk to the BMS over CAN/RS485."
 
 SETTINGS = (
-    Setting("cell_ovp", "Overvoltage protection", "Cell OVP", "voltage", 18, 0x04, min=3.40, max=3.65,
-            help="Charging stops when any cell reaches this. You use it as the normal charge stop. "
-                 "Datasheet limit 3.65 V."),
-    Setting("cell_ovpr", "Overvoltage release", "Cell OVPR", "voltage", 22, 0x05, min=3.25, max=3.60,
+    Setting("cell_ovp", "Overvoltage protection", "Cell OVP", "voltage", 18, 0x04, **_CELL_V,
+            help="Charging stops when any cell reaches this."),
+    Setting("cell_ovpr", "Overvoltage release", "Cell OVPR", "voltage", 22, 0x05, **_CELL_V,
             help="Charging is allowed again once the highest cell falls to this."),
-    Setting("cell_uvp", "Undervoltage protection", "Cell UVP", "voltage", 10, 0x02, min=2.50, max=3.10,
-            help="Discharging stops when any cell falls to this. Datasheet discharge cutoff 2.70 V."),
-    Setting("cell_uvpr", "Undervoltage release", "Cell UVPR", "voltage", 14, 0x03, min=2.60, max=3.30,
+    Setting("cell_uvp", "Undervoltage protection", "Cell UVP", "voltage", 10, 0x02, **_CELL_V,
+            help="Discharging stops when any cell falls to this."),
+    Setting("cell_uvpr", "Undervoltage release", "Cell UVPR", "voltage", 14, 0x03, **_CELL_V,
             help="Discharging is allowed again once the lowest cell recovers to this."),
-    Setting("power_off_v", "Power-off voltage", "Power Off Vol.", "voltage", 46, 0x0B, min=2.30, max=3.00,
+    Setting("power_off_v", "Power-off voltage", "Power Off Vol.", "voltage", 46, 0x0B, **_CELL_V,
             help="The BMS switches itself off when a cell falls this low."),
-    Setting("soc100_v", "100% charge voltage", "SOC-100% Volt.", "voltage", 30, 0x07, min=3.30, max=3.65,
+    Setting("soc100_v", "100% charge voltage", "SOC-100% Volt.", "voltage", 30, 0x07, **_CELL_V,
             help="The charge counter resets to 100% when a cell reaches this."),
-    Setting("soc0_v", "0% charge voltage", "SOC-0% Volt.", "voltage", 34, 0x08, min=2.50, max=3.20,
+    Setting("soc0_v", "0% charge voltage", "SOC-0% Volt.", "voltage", 34, 0x08, **_CELL_V,
             help="The charge counter resets to 0% when a cell falls to this."),
     Setting("smart_sleep_v", "Smart sleep voltage", "Smart Sleep Volt.", "voltage", 6, None),
     Setting("balance_trigger_v", "Balance trigger difference", "Balance Trig. Volt.", "balance", 26, 0x06,
-            min=0.003, max=0.100, help="The balancer runs when cells differ by at least this much..."),
+            bounds=(0.003, 1.0), help="The balancer runs when cells differ by at least this much..."),
     Setting("balance_start_v", "Balance start voltage", "Start Balance Volt.", "balance", 138, 0x22,
-            min=3.00, max=3.60, help="...and a cell is above this voltage."),
+            bounds=(1.2, 4.25), help="...and a cell is above this voltage."),
     Setting("max_balance_a", "Balance current", "Max Balance Curr.", "balance", 78, 0x13, **_AMPS,
-            min=0.1, max=1.0, help="1 A is the most this BMS can do."),
+            bounds=(0.1, 15.0), help="Keep it within what your BMS model can do."),
     Setting("balancer", "Balancer", "Balance", "balance", 126, 0x1F, switch=True),
     Setting("max_charge_a", "Charge overcurrent protection", "Continued Charge Curr.", "current", 50, 0x0C,
-            **_AMPS, min=1, max=100),
-    Setting("charge_ocp_delay", "Charge overcurrent delay", "Charge OCP Delay", "current", 54, 0x0D,
-            **_SECONDS, min=1, max=600),
-    Setting("charge_ocpr_time", "Charge overcurrent recovery", "Charge OCPR Time", "current", 58, 0x0E,
-            **_SECONDS, min=1, max=600),
+            **_AMPS, bounds=(1, 600)),
+    Setting("charge_ocp_delay", "Charge overcurrent delay", "Charge OCP Delay", "current", 54, 0x0D, **_DELAY),
+    Setting("charge_ocpr_time", "Charge overcurrent recovery", "Charge OCPR Time", "current", 58, 0x0E, **_DELAY),
     Setting("max_discharge_a", "Discharge overcurrent protection", "Continued Discharge Curr.", "current",
-            62, 0x0F, **_AMPS, min=1, max=100),
+            62, 0x0F, **_AMPS, bounds=(1, 1200)),
     Setting("discharge_ocp_delay", "Discharge overcurrent delay", "Discharge OCP Delay", "current", 66, 0x10,
-            **_SECONDS, min=1, max=600),
+            **_DELAY),
     Setting("discharge_ocpr_time", "Discharge overcurrent recovery", "Discharge OCPR Time", "current", 70,
-            0x11, **_SECONDS, min=1, max=600),
+            0x11, **_DELAY),
     Setting("scp_delay", "Short-circuit delay", "SCP Delay", "current", 134, None, factor=1, unit="µs", digits=0),
-    Setting("scpr_time", "Short-circuit recovery", "SCPR Time", "current", 74, None, **_SECONDS),
+    Setting("scpr_time", "Short-circuit recovery", "SCPR Time", "current", 74, None, factor=1, unit="s", digits=0),
     Setting("charge_otp", "Charge overtemperature", "Charge OTP", "temperature", 82, 0x14, **_TEMP,
-            min=30, max=60, help="Datasheet: charge at 0–60 °C."),
+            bounds=(30, 80)),
     Setting("charge_otpr", "Charge overtemperature release", "Charge OTPR", "temperature", 86, 0x15, **_TEMP,
-            min=20, max=58),
+            bounds=(30, 80)),
     Setting("discharge_otp", "Discharge overtemperature", "Discharge OTP", "temperature", 90, 0x16, **_TEMP,
-            min=30, max=70),
+            bounds=(30, 80)),
     Setting("discharge_otpr", "Discharge overtemperature release", "Discharge OTPR", "temperature", 94, 0x17,
-            **_TEMP, min=20, max=68),
+            **_TEMP, bounds=(30, 80)),
     Setting("charge_utp", "Charge undertemperature", "Charge UTP", "temperature", 98, 0x18, **_TEMP,
-            min=0, max=15, help="LFP cells must not be charged below 0 °C."),
+            bounds=(-45, 20), help="Lithium cells shouldn't be charged below 0 °C."),
     Setting("charge_utpr", "Charge undertemperature release", "Charge UTPR", "temperature", 102, 0x19,
-            **_TEMP, min=2, max=20),
-    Setting("mos_otp", "MOSFET overtemperature", "MOS OTP", "temperature", 106, 0x1A, **_TEMP, min=50, max=100),
+            **_TEMP, bounds=(-45, 20)),
+    Setting("mos_otp", "MOSFET overtemperature", "MOS OTP", "temperature", 106, 0x1A, **_TEMP, bounds=(50, 110)),
     Setting("mos_otpr", "MOSFET overtemperature release", "MOS OTPR", "temperature", 110, 0x1B, **_TEMP,
-            min=40, max=95),
+            bounds=(50, 110)),
     Setting("capacity_ah", "Battery capacity", "Battery Capacity", "battery", 130, 0x20, unit="Ah", digits=1,
-            min=50, max=500, help="Used for the state-of-charge counter."),
+            bounds=(2, 20000), help="Used for the state-of-charge counter."),
     Setting("cell_count", "Cell count", "Cell Count", "battery", 114, None, factor=1, unit="", digits=0),
     Setting("charging", "Charging allowed", "Charge", "battery", 118, 0x1D, switch=True,
-            caution="With charging off, the UPS can't recharge the battery."),
+            caution="With charging off, nothing can charge the battery."),
     Setting("discharging", "Discharging allowed", "Discharge", "battery", 122, 0x1E, switch=True,
-            caution="With discharging off, the battery can't power the UPS in a blackout."),
-    Setting("rcv", "Request charge voltage", "Vol. Cell RCV", "inverter", 38, 0x09, min=3.30, max=3.65,
-            help="Only sent to inverters that talk to the BMS over CAN/RS485."),
-    Setting("rfv", "Request float voltage", "Vol. Cell RFV", "inverter", 42, 0x0A, min=3.20, max=3.50,
-            help="Only sent to inverters that talk to the BMS over CAN/RS485."),
-)
+            caution="With discharging off, the battery can't supply power, so a UPS loses its backup."),
+    Setting("rcv", "Request charge voltage", "Vol. Cell RCV", "inverter", 38, 0x09, **_CELL_V, help=_INVERTER),
+    Setting("rfv", "Request float voltage", "Vol. Cell RFV", "inverter", 42, 0x0A, **_CELL_V, help=_INVERTER),
+)  # fmt: skip
 SETTINGS_BY_KEY = {s.key: s for s in SETTINGS}
+assert all(s.bounds for s in SETTINGS if s.register is not None and not s.switch), "writable numbers need bounds"
 
 # bitmask at offset 282 (LE16); shown read-only
 SETTING_FLAGS = (
@@ -230,7 +232,44 @@ def raw_value(s: Setting, value: Any) -> int:
     return int(bool(value)) if s.switch else round(float(value) * s.factor)
 
 
-def validate_changes(current: dict[str, Any], changes: dict[str, Any]) -> list[str]:
+Limits = dict[str, tuple[float, float]]
+
+
+def parse_limits(raw: dict[str, Any]) -> tuple[Limits, list[str]]:
+    """[limits] from config.toml as {key: (min, max)}, plus problems to report.
+    A bad entry is dropped, which leaves that setting read-only."""
+    limits: Limits = {}
+    problems: list[str] = []
+    for key, value in raw.items():
+        s = SETTINGS_BY_KEY.get(key)
+        if s is not None and s.switch:
+            problems.append(f"[limits] {key}: on/off settings don't take a range, ignored")
+            continue
+        if s is None or s.register is None:
+            problems.append(f"[limits] {key}: not a setting that can be changed, ignored")
+            continue
+        numbers = isinstance(value, list) and len(value) == 2 and all(
+            isinstance(v, (int, float)) and not isinstance(v, bool) for v in value
+        )
+        if not numbers or value[0] >= value[1]:
+            problems.append(f"[limits] {key}: needs [min, max] with min below max, ignored")
+            continue
+        lo, hi = float(value[0]), float(value[1])
+        if lo < s.bounds[0] or hi > s.bounds[1]:
+            problems.append(
+                f"[limits] {key}: {lo:g}–{hi:g} {s.unit} is outside what the BMS works with "
+                f"({s.bounds[0]:g}–{s.bounds[1]:g} {s.unit}), ignored"
+            )
+            continue
+        limits[key] = (lo, hi)
+    return limits, problems
+
+
+def editable(s: Setting, limits: Limits) -> bool:
+    return s.register is not None and (s.switch or s.key in limits)
+
+
+def validate_changes(limits: Limits, current: dict[str, Any], changes: dict[str, Any]) -> list[str]:
     errors: list[str] = []
     for key, value in changes.items():
         s = SETTINGS_BY_KEY.get(key)
@@ -239,10 +278,13 @@ def validate_changes(current: dict[str, Any], changes: dict[str, Any]) -> list[s
         elif s.switch:
             if not isinstance(value, bool):
                 errors.append(f"{s.label}: must be on or off")
+        elif key not in limits:
+            errors.append(f"{s.label}: no allowed range under [limits] in config.toml")
         elif isinstance(value, bool) or not isinstance(value, (int, float)):
             errors.append(f"{s.label}: not a number")
-        elif not s.min <= value <= s.max:
-            errors.append(f"{s.label}: must be between {s.min:g} and {s.max:g} {s.unit}")
+        elif not limits[key][0] <= value <= limits[key][1]:
+            lo, hi = limits[key]
+            errors.append(f"{s.label}: must be between {lo:g} and {hi:g} {s.unit}")
     if errors:
         return errors
     merged = {**current, **changes}
@@ -263,6 +305,8 @@ class Config:
     idle_store_seconds: float
     active_current_a: float
     thresholds: dict[str, Any]
+    limits: Limits
+    problems: tuple[str, ...]  # config mistakes, logged and shown on the settings tab
     host: str
     port: int
 
@@ -270,6 +314,7 @@ class Config:
     def load(cls, path: Path) -> Config:
         raw = tomllib.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
         bms, logging_, web = raw.get("bms", {}), raw.get("logging", {}), raw.get("web", {})
+        limits, problems = parse_limits(raw.get("limits", {}))
         return cls(
             bms_name=str(bms.get("name", "")).strip(),
             bms_address=str(bms.get("address", "")).strip().upper(),
@@ -277,6 +322,8 @@ class Config:
             idle_store_seconds=max(5.0, float(logging_.get("idle_store_seconds", 60))),
             active_current_a=abs(float(logging_.get("active_current_a", 0.25))),
             thresholds=dict(raw.get("thresholds", {})),
+            limits=limits,
+            problems=tuple(problems),
             host=str(web.get("host", "127.0.0.1")),
             port=int(web.get("port", 8765)),
         )
@@ -804,7 +851,7 @@ def _write_order(current: dict[str, Any], changes: dict[str, Any]) -> list[str]:
     return order
 
 
-def settings_payload(state: LiveState) -> dict[str, Any]:
+def settings_payload(cfg: Config, state: LiveState) -> dict[str, Any]:
     settings, read_at = state.settings_snapshot()
     history: list[dict[str, Any]] = []
     if DB_PATH.exists():
@@ -820,17 +867,22 @@ def settings_payload(state: LiveState) -> dict[str, Any]:
         "settings": [
             {
                 "key": s.key, "label": s.label, "jk_name": s.jk_name, "group": s.group, "unit": s.unit,
-                "digits": s.digits, "min": s.min, "max": s.max, "step": None if s.switch else 10**-s.digits,
-                "editable": s.register is not None, "switch": s.switch, "help": s.help, "caution": s.caution,
+                "digits": s.digits, "step": None if s.switch else 10**-s.digits,
+                "min": cfg.limits.get(s.key, (None, None))[0], "max": cfg.limits.get(s.key, (None, None))[1],
+                "editable": editable(s, cfg.limits),
+                # why it's read-only: "config" = no [limits] range, "fixed" = never written here
+                "locked": None if editable(s, cfg.limits) else "config" if s.register is not None else "fixed",
+                "switch": s.switch, "help": s.help, "caution": s.caution,
             }
             for s in SETTINGS
         ],  # fmt: skip
         "rules": [{"a": a, "b": b, "offset": off, "message": msg} for a, b, off, msg in SETTING_RULES],
+        "config_problems": list(cfg.problems),
         "history": history,
     }
 
 
-async def apply_settings(state: LiveState, changes: dict[str, Any]) -> dict[str, Any]:
+async def apply_settings(cfg: Config, state: LiveState, changes: dict[str, Any]) -> dict[str, Any]:
     """Write changes one register at a time. After each write the whole settings
     frame is read back: the target must hold the new value and nothing else may
     have moved, otherwise the remaining writes are skipped."""
@@ -839,7 +891,7 @@ async def apply_settings(state: LiveState, changes: dict[str, Any]) -> dict[str,
         raise SettingsError("Not connected to the BMS")
     await bms.read_settings()
     current = dict(state.settings_snapshot()[0]["values"])
-    errors = validate_changes(current, changes)
+    errors = validate_changes(cfg.limits, current, changes)
     if errors:
         return {"ok": False, "errors": errors, "results": []}
 
@@ -1143,7 +1195,7 @@ def make_handler(cfg: Config, state: LiveState) -> type[BaseHTTPRequestHandler]:
             if url.path == "/api/status":
                 self._json(status_payload(cfg, state))
             elif url.path == "/api/settings":
-                self._json(settings_payload(state))
+                self._json(settings_payload(cfg, state))
             elif url.path == "/api/history":
                 t0, t1 = _time_range(query)
                 points = int(min(max(_query_num(query, "points", 1500), 100), 5000))
@@ -1185,13 +1237,15 @@ def make_handler(cfg: Config, state: LiveState) -> type[BaseHTTPRequestHandler]:
             try:
                 if path == "/api/settings/read":
                     run_settings_op(state, lambda: state.bms.read_settings(), timeout=20)
-                    self._json(settings_payload(state))
+                    self._json(settings_payload(cfg, state))
                     return
                 changes = self._body_json().get("changes")
                 if not isinstance(changes, dict) or not changes:
                     raise SettingsError("No changes given")
-                outcome = run_settings_op(state, lambda: apply_settings(state, changes), timeout=30 + 10 * len(changes))
-                self._json({**outcome, "settings": settings_payload(state)})
+                outcome = run_settings_op(
+                    state, lambda: apply_settings(cfg, state, changes), timeout=30 + 10 * len(changes)
+                )
+                self._json({**outcome, "settings": settings_payload(cfg, state)})
             except SettingsError as exc:
                 self._json({"error": str(exc)}, HTTPStatus.CONFLICT)
             except Exception as exc:  # Bluetooth trouble mid-operation
@@ -1260,6 +1314,8 @@ def main() -> int:
     if not (cfg.bms_name or cfg.bms_address):
         log.error("config.toml: set [bms] name or address")
         return 2
+    for problem in cfg.problems:
+        log.warning("config.toml: %s", problem)
     state = LiveState()
     try:
         server = DashboardServer((cfg.host, cfg.port), make_handler(cfg, state))
