@@ -1,0 +1,32 @@
+# JK BMS logger settings. Copy to config.toml, then restart the logger after editing.
+
+[bms]
+# Bluetooth name as shown in the JK app. Used to find the BMS.
+name = "YOUR-BMS-NAME"
+# Optional Bluetooth address (AA:BB:CC:DD:EE:FF). When set it wins over the name.
+address = ""
+
+[logging]
+# How often to read the BMS, in seconds.
+poll_seconds = 5
+# While the battery is idle, store one sample this often (seconds).
+# While charging/discharging, every reading is stored.
+idle_store_seconds = 60
+# |current| at or above this (amps) counts as charging/discharging.
+active_current_a = 0.25
+
+[thresholds]
+# Reference lines on the graphs. While connected, the logger reads these four
+# from the BMS itself; the values here are only used before the first read.
+cell_ovp_v = 3.53
+cell_uvp_v = 2.70
+balance_start_v = 3.40
+balance_trigger_mv = 10
+# Alarms that are part of normal operation (shown as info, not as a problem).
+# Here OVP is used as the normal charge stop.
+expected_alarms = ["Cell OVP"]
+
+[web]
+# Keep 127.0.0.1 so the dashboard is only reachable from this PC.
+host = "127.0.0.1"
+port = 8765

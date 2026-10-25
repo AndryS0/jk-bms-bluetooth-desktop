@@ -1,0 +1,11 @@
+# local environment
+.venv/
+__pycache__/
+*.py[cod]
+
+# runtime output: readings database and logs
+data/
+logs/
+
+# personal settings (BMS Bluetooth name); start from config.example.toml
+config.toml

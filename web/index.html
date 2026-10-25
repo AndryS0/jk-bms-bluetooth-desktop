@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>Battery monitor</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect x='2' y='8' width='25' height='16' rx='3' fill='none' stroke='%232a78d6' stroke-width='3'/%3E%3Crect x='27' y='13' width='3' height='6' rx='1' fill='%232a78d6'/%3E%3Crect x='6' y='12' width='14' height='8' rx='1' fill='%232a78d6'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="vendor/uPlot.min.css">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="page">
+  <header class="masthead">
+    <div>
+      <h1>Battery monitor</h1>
+      <p class="subtitle" id="device">JK BMS</p>
+    </div>
+    <div class="conn">
+      <span class="pill" id="conn-pill" role="status"><span class="status-icon warning" aria-hidden="true">!</span><span id="conn-text">Starting</span></span>
+      <span class="muted small" id="conn-detail"></span>
+      <button type="button" class="btn" id="pause-btn" title="Disconnect so the JK phone app can connect">Free Bluetooth for 10 min</button>
+      <button type="button" class="btn" id="resume-btn" hidden>Resume logging</button>
+    </div>
+  </header>
+
+  <nav class="tabs" role="tablist" aria-label="Views">
+    <button type="button" role="tab" id="tab-monitor" aria-controls="view-monitor" aria-selected="true">Monitor</button>
+    <button type="button" role="tab" id="tab-settings" aria-controls="view-settings" aria-selected="false">BMS settings</button>
+  </nav>
+
+  <div id="view-monitor" role="tabpanel" aria-labelledby="tab-monitor">
+    <section class="tiles" id="tiles" aria-label="Latest reading"></section>
+
+    <div class="filters" role="toolbar" aria-label="Time range">
+      <div class="seg" id="ranges"></div>
+      <button type="button" class="btn ghost" id="reset-zoom" hidden>Reset zoom</button>
+      <span class="muted small" id="range-hint">Drag across a graph to zoom in</span>
+      <span class="spacer"></span>
+      <a class="btn ghost" id="csv-link" href="api/export.csv">Download CSV</a>
+    </div>
+    <p class="notice" id="notice" hidden></p>
+
+    <section class="charts" id="charts" aria-label="History graphs"></section>
+
+    <section class="card block">
+      <h2>Charging and discharging</h2>
+      <p class="muted small">Stretches where at least <span id="active-a">0.25</span> A flowed, in the selected range. Newest first.</p>
+      <div class="table-wrap"><table id="sessions"></table></div>
+    </section>
+
+    <section class="card block">
+      <h2>Events</h2>
+      <p class="muted small">Switch changes, alarms and times the logger wasn't running. Newest first.</p>
+      <div class="table-wrap"><table id="events"></table></div>
+    </section>
+  </div>
+
+  <div id="view-settings" role="tabpanel" aria-labelledby="tab-settings" hidden>
+    <div class="settings-head">
+      <div>
+        <h2>BMS settings</h2>
+        <p class="muted small" id="settings-read">Not read yet</p>
+      </div>
+      <button type="button" class="btn" id="settings-reload">Read again from the BMS</button>
+    </div>
+    <p class="notice" id="settings-notice" hidden></p>
+    <p class="muted small settings-intro">Changed values are written one at a time. After each write the logger reads every setting back from the BMS, to confirm the new value took effect and nothing else changed; if anything looks wrong it stops. Limits follow your cells' datasheet, which is stricter than what the BMS allows.</p>
+    <div id="settings-groups"></div>
+
+    <section class="card block">
+      <h2>Change history</h2>
+      <p class="muted small">Every write made from this page, newest first.</p>
+      <div class="table-wrap"><table id="settings-history"></table></div>
+    </section>
+
+    <div class="changes-bar" id="changes-bar" hidden>
+      <strong id="changes-count"></strong>
+      <span class="field-error" id="changes-errors"></span>
+      <span class="spacer"></span>
+      <button type="button" class="btn ghost" id="changes-discard">Discard</button>
+      <button type="button" class="btn primary" id="changes-review">Review changes</button>
+    </div>
+  </div>
+
+  <footer class="muted small" id="footer"></footer>
+</div>
+
+<dialog id="review" aria-labelledby="review-title">
+  <h2 id="review-title">Write these changes to the BMS?</h2>
+  <table class="review-table" id="review-list"></table>
+  <div id="review-cautions"></div>
+  <div id="review-results" hidden></div>
+  <div class="dialog-actions">
+    <button type="button" class="btn ghost" id="review-cancel">Cancel</button>
+    <button type="button" class="btn primary" id="review-write">Write to BMS</button>
+  </div>
+</dialog>
+
+<script src="vendor/uPlot.iife.min.js"></script>
+<script src="app.js"></script>
+<script src="settings.js"></script>
+</body>
+</html>

@@ -1,0 +1,12 @@
+[project]
+name = "jk-bms-logger"
+version = "0.1.0"
+description = "Log a JK BMS over Bluetooth LE and show history graphs in the browser"
+requires-python = ">=3.12"
+dependencies = [
+    # pre-1.0 library: pin the minor version, the API still moves between minors
+    "aiobmsble>=0.30,<0.31",
+]
+
+[tool.uv]
+package = false
