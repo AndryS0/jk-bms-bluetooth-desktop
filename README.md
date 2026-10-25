@@ -1,4 +1,8 @@
 # jk-bms-logger
+|General view | Settings tab|
+| :--- | ---: |
+|<img width="1308" height="954" alt="image" src="https://github.com/user-attachments/assets/58d858f5-01c8-4254-bfe0-cb38d09284c9" />|<img width="1439" height="838" alt="image" src="https://github.com/user-attachments/assets/d41f5e41-2e31-4489-b89c-dbd15a2c4b61" />|
+
 
 A lightweight logger and dashboard for a JK BMS, read over Bluetooth from a
 Windows PC. I made it for my own setup: a 4S LiFePO4 UPS battery (REPT
@@ -25,6 +29,9 @@ are for my cells.
     each write the logger reads all settings back to confirm the change. What
     may be changed, and within which range, comes from `[limits]` in
     `config.toml`; settings without a range there stay read-only.
+
+    
+
 
 ## Run
 
